@@ -1,65 +1,28 @@
-import time
 import json
-from datetime import datetime
-from kafka import KafkaAdminClient, KafkaConsumer
-
-def consumer_from_kafka(topic,stations):
-
-    stations_bikes={}
-    stations_date={}
-
-    stations={}
-    
-
-        
-    consumer = KafkaConsumer("velib-stations", bootstrap_servers='kafka:29092',auto_offset_reset="earliest",
-enable_auto_commit=True, auto_commit_interval_ms=1000)
-    consumer.subscribe(["velib-stations"])
-
-    city_stations={}
-    # if consumer.empt
-    for message in consumer:
-        station = json.loads(message.value.decode())
-        #print(station)
-        #print("da",datetime.utcfromtimestamp(station["last_update"]/1000).strftime('%Y-%m-%d %H:%M:%S'))
-        station_number = station["number"]
-        station_last_update = station["last_update"]
-
-        #if station_number ==30:
-        #    print(station)
-        name = station["name"]
-        available_bike_stands = station["available_bike_stands"]
-            
-        if name not in city_stations:
-            city_stations[name] = available_bike_stands
-            #print("st",station_number, city_stations[station_number])
-
-        count_diff = available_bike_stands - city_stations[name]
-        if count_diff != 0:
-            #print(available_bike_stands,city_stations[station_number])
-            city_stations[name] = available_bike_stands
-            print("{}{} {} ({})".format(
-                "+" if count_diff > 0 else "",
-                count_diff, station["address"], name
-            ))
-        #else:
-            #print("0",station["address"])
-    
-    consumer.close()
-
-
+from kafka import KafkaConsumer
 
 def main():
-    print("consumer : ")
-    stations = {}
-    topic = 'velib-stations'
-    try:
-        admin = KafkaAdminClient(bootstrap_servers='kafka:29092')
-    except Exception:
-        pass
+    consumer = KafkaConsumer(
+        "meteo",
+        bootstrap_servers="kafka:9092",
+        auto_offset_reset="latest",
+        enable_auto_commit=True,
+        value_deserializer=lambda v: json.loads(v.decode("utf-8")),
+    )
 
-    consumer_from_kafka(topic,stations)
+    for msg in consumer:
+        d = msg.value
+        geo = d.get("geo_id_insee")
+        t = d.get("t")
+        u = d.get("u")
+        ff = d.get("ff")
+        rr = d.get("rr_per")
+        ref = d.get("reference_time")
+
+        # t em Kelvin -> Celsius (se existir)
+        t_c = (t - 273.15) if isinstance(t, (int, float)) else None
+
+        print(f"{ref} geo={geo} T={t_c:.2f}°C U={u}% FF={ff} RR={rr}")
 
 if __name__ == "__main__":
     main()
-    
