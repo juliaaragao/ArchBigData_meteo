@@ -1,0 +1,1 @@
+docker exec consumer python TP2_consumer.py
