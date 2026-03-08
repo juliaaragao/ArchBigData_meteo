@@ -51,6 +51,10 @@ ln -sf /dev/stdout $SPARK_MASTER_LOG && \
 ln -sf /dev/stdout $SPARK_WORKER_LOG
 
 # COPY spark-defaults.conf "${SPARK_HOME}/conf"
-COPY start-spark.sh /
+# COPY start-spark.sh /
+COPY spark-defaults.conf /opt/spark/conf/spark-defaults.conf
+COPY spark-env.sh /opt/spark/conf/spark-env.sh
+COPY start-spark.sh /start-spark.sh
+
 
 CMD ["/bin/bash", "/start-spark.sh"]

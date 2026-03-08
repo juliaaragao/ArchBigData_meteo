@@ -9,7 +9,7 @@ services:
       - "8888:8888"
       - "4041:4040"
     volumes:
-       - ../..:/opt/spark-apps
+       - ./apps:/opt/spark-apps
        - ./data:/opt/spark-data
        - ./spark-logs:/tmp/spark-events
     environment:
@@ -17,7 +17,7 @@ services:
       - SPARK_MASTER_CORES=2
       - SPARK_WORKLOAD=master
     entrypoint: /bin/bash
-    command: -c "/opt/spark-apps/spark_cluster/spark/apps/jupyter_start.sh; tail -f /dev/null"
+    command: -c "/opt/spark-apps/jupyter_start_3.sh; tail -f /dev/null"
 
   spark-master:
     build: .
@@ -32,7 +32,7 @@ services:
       - "4040:4040"
       - "8889:8889"
     volumes:
-       - ../..:/opt/spark-apps
+       - ./apps:/opt/spark-apps
        - ./data:/opt/spark-data
        - ./spark-logs:/tmp/spark-events
     environment:
@@ -40,7 +40,7 @@ services:
       - SPARK_MASTER_CORES=2
       - SPARK_WORKLOAD=master
     entrypoint: /bin/bash
-    command: /opt/spark-apps/spark_cluster/spark/apps/jupyter_start_2.sh; tail -f /dev/null"
+    command: /opt/spark-apps/jupyter_start_2.sh; tail -f /dev/null"
 
   spark-worker-a:
     build: .
@@ -62,9 +62,9 @@ services:
       - SPARK_WORKLOAD=worker
       - SPARK_LOCAL_IP=spark-worker-a
     volumes:
-       - ../..:/opt/spark-apps
-       - ./data:/opt/spark-data
-       - ./spark-logs:/tmp/spark-events
+      - ./apps:/opt/spark-apps
+      - ./data:/opt/spark-data
+      - ./spark-logs:/tmp/spark-events
 
   spark-worker-b:
     build: .
@@ -87,9 +87,9 @@ services:
       - SPARK_WORKLOAD=worker
       - SPARK_LOCAL_IP=spark-worker-b
     volumes:
-        - ../..:/opt/spark-apps
-        - ./data:/opt/spark-data
-        - ./spark-logs:/tmp/spark-events
+      - ./apps:/opt/spark-apps
+      - ./data:/opt/spark-data
+      - ./spark-logs:/tmp/spark-events
 
   spark-worker-c:
     build: .
@@ -112,9 +112,9 @@ services:
       - SPARK_WORKLOAD=worker
       - SPARK_LOCAL_IP=spark-worker-c
     volumes:
-        - ../..:/opt/spark-apps
-        - ./data:/opt/spark-data
-        - ./spark-logs:/tmp/spark-events
+      - ./apps:/opt/spark-apps
+      - ./data:/opt/spark-data
+      - ./spark-logs:/tmp/spark-events
 
   spark-history-server:
     build: .

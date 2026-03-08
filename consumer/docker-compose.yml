@@ -9,6 +9,7 @@ services:
       - network1
     volumes:
       - ./app:/consumer/app
+    command: python -u /consumer/app/TP2_consumer.py
 
 networks:
   network1:
