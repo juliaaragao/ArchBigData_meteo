@@ -36,15 +36,49 @@ spark-checkpoint/
 meteo_checkpoint/
 meteo_out/
 
+# checkpoints streaming
+checkpoints/
+*/checkpoints/
+
 # Arquivos internos Spark
 *.crc
 .inprogress/
 *.inprogress.crc
 
 # =========================
-# Docker
+# Data (MUITO IMPORTANTE)
+# =========================
+data/
+*/data/
+opt/spark-data/
+
+# =========================
+# Cassandra / DB
+# =========================
+*.db
+*.sqlite
+cassandra-data/
+
+# =========================
+# Kafka / logs
 # =========================
 *.log
+
+# =========================
+# Docker volumes
+# =========================
 docker-data/
+volumes/
 
+# =========================
+# JARs (NÃO versionar)
+# =========================
+*.jar
 
+# =========================
+# Arquivos grandes de teste
+# =========================
+*.gz
+*.zip
+*.csv
+*.parquet

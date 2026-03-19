@@ -1,2 +1,0 @@
-v1
-{"path":"file:///opt/spark-data/meteo_parquet/part-00000-dcaa86bd-469d-474a-b219-f09d98d515bc-c000.snappy.parquet","size":3020,"isDir":false,"modificationTime":1773002478605,"blockReplication":1,"blockSize":33554432,"action":"add"}
