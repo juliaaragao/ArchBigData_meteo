@@ -1,5 +1,5 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, from_json, to_timestamp, window, avg
+from pyspark.sql.functions import col, from_json, to_timestamp, window, avg, from_utc_timestamp
 from pyspark.sql.types import *
 
 scala_version = "2.13"
@@ -81,9 +81,10 @@ df_parsed = df_string.select(
 df_clean = df_parsed.select(
     col("geo_id_insee"),
     to_timestamp(col("reference_time"), "yyyy-MM-dd'T'HH:mm:ssX").alias("reference_time"),
+    #from_utc_timestamp(to_timestamp(col("reference_time")),"Europe/Paris").alias("reference_time"),
     (col("t") - 273.15).alias("temperature_c"),
     col("u").alias("humidity"),
-    col("ff").alias("wind_speed"),
+    (col("ff") * 3.6).alias("wind_speed"), # conversão de m/s para km/h
     col("dd").alias("wind_direction"),
     col("rr_per").alias("rain"),
     col("pres").alias("pressure")
@@ -102,10 +103,10 @@ df_clean = df_parsed.select(
 # )
 
 df_speed = df_clean \
-    .withWatermark("reference_time", "15 minutes") \
+    .withWatermark("reference_time", "7 minutes") \
     .groupBy(
         col("geo_id_insee"),
-        window(col("reference_time"), "10 minutes")
+        window(col("reference_time"), "6 minutes")
     ).agg(
         avg("temperature_c").alias("avg_temp"),
         avg("wind_speed").alias("avg_wind"),
@@ -136,7 +137,9 @@ query = (
           .mode("append")
           .save()
     )
-    .outputMode("append")  # mais seguro com Cassandra
+    # .outputMode("append")  # mais seguro com Cassandra
+    .outputMode("update")
+    .trigger(processingTime="1 minute")
     .option("checkpointLocation", "/opt/spark-data/checkpoints/speed_to_cassandra")
     .start()
 )
