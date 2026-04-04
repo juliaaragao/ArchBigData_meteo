@@ -1,1 +1,0 @@
-docker exec producer python TP2_producer.py velib-station

@@ -1,7 +1,0 @@
-docker exec spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --driver-memory 1G --executor-memory 1G  --conf "spark.eventLog.enabled=true" --conf "spark.eventLog.dir=file:/tmp/spark-events" --num-executors 2 --executor-cores 2 --total-executor-cores 4 /opt/spark-apps/TP3_exercice1_RDD.py
-
-docker exec spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --driver-memory 1G --executor-memory 1G  --conf "spark.eventLog.enabled=true" --conf "spark.eventLog.dir=file:/tmp/spark-events" --num-executors 1 --executor-cores 2 --total-executor-cores 2 /opt/spark-apps/TP3_exercice1_DataFrame.py
-
-docker exec spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --driver-memory 1G --executor-memory 1G  --conf "spark.eventLog.enabled=true" --conf "spark.eventLog.dir=file:/tmp/spark-events" --num-executors 1 --executor-cores 2 --total-executor-cores 2 /opt/spark-apps/TP3_exercice1_RDD_v2.py
-
-docker exec spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --driver-memory 1G --executor-memory 1G  --conf "spark.eventLog.enabled=true" --conf "spark.eventLog.dir=file:/tmp/spark-events" --num-executors 1 --executor-cores 2 --total-executor-cores 2 /opt/spark-apps/TP3_exercice2_RDD_text.py

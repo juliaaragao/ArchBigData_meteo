@@ -5,27 +5,14 @@ from pyspark.sql.types import *
 scala_version = "2.13"
 spark_version = "4.0.1"
 
-# -----------------------------
-# 🔧 MODIFICAÇÃO: adicionando conector Cassandra (versão compatível)
-# -----------------------------
+
+# packages 
 packages = [
     f"org.apache.spark:spark-sql-kafka-0-10_{scala_version}:{spark_version}",
-    "com.datastax.spark:spark-cassandra-connector_2.13:3.4.1"  # versão mais estável
+    "com.datastax.spark:spark-cassandra-connector_2.13:3.4.1"  
 ]
 
-# -----------------------------
-# 🔧 MODIFICAÇÃO: builder corrigido (sem "\" para evitar erro de sintaxe)
-# ➕ conexão com Cassandra
-# -----------------------------
-# spark = (
-#     SparkSession.builder
-#     .master("spark://spark-master:7077")
-#     .appName("MeteoSpeedLayer")
-#     .config("spark.jars", "/opt/spark/custom-jars/spark-cassandra-connector_2.13-3.4.1.jar")  # caminho para o JAR
-#     .config("spark.cassandra.connection.host", "cassandra")  # nome do container Docker
-#     .getOrCreate()
-    
-# )
+# SparkSession config pour kafka et Cassandra
 spark = (
     SparkSession.builder
     .master("spark://spark-master:7077")
@@ -41,9 +28,8 @@ spark = (
 
 spark.sparkContext.setLogLevel("WARN")
 
-# -----------------------------
-# Kafka streaming
-# -----------------------------
+
+# Kafka source - ici on lit directement du topic "meteo" pour faire la speed layer 
 df_kafka = (
     spark.readStream
     .format("kafka")
@@ -55,9 +41,7 @@ df_kafka = (
 
 df_string = df_kafka.selectExpr("CAST(value AS STRING) AS json")
 
-# -----------------------------
-# Schema
-# -----------------------------
+# Schéma pour parser le JSON 
 meteo_schema = StructType([
     StructField("lat", DoubleType(), True),
     StructField("lon", DoubleType(), True),
@@ -71,37 +55,27 @@ meteo_schema = StructType([
     StructField("pres", DoubleType(), True)
 ])
 
+# Parsing JSON
 df_parsed = df_string.select(
     from_json(col("json"), meteo_schema).alias("data")
 ).select("data.*")
 
-# -----------------------------
-# Cleaning
-# -----------------------------
+# Nettoyage et transformation des données
 df_clean = df_parsed.select(
     col("geo_id_insee"),
     to_timestamp(col("reference_time"), "yyyy-MM-dd'T'HH:mm:ssX").alias("reference_time"),
     #from_utc_timestamp(to_timestamp(col("reference_time")),"Europe/Paris").alias("reference_time"),
     (col("t") - 273.15).alias("temperature_c"),
     col("u").alias("humidity"),
-    (col("ff") * 3.6).alias("wind_speed"), # conversão de m/s para km/h
+    (col("ff") * 3.6).alias("wind_speed"), # m/s -> km/h
     col("dd").alias("wind_direction"),
     col("rr_per").alias("rain"),
     col("pres").alias("pressure")
 ).filter(col("geo_id_insee").isNotNull())
 
-# -----------------------------
-# Speed Layer (agregação tempo real)
-# -----------------------------
-# df_speed = df_clean.groupBy(
-#     col("geo_id_insee"),
-#     window(col("reference_time"), "1 minute")
-# ).agg(
-#     avg("temperature_c").alias("avg_temp"),
-#     avg("wind_speed").alias("avg_wind"),
-#     avg("humidity").alias("avg_humidity")
-# )
-
+# Pour une vue presque temps réel 
+# Comme les donnés arrivent toutes 6min regulierment -> 6min fenetre + 7min watermark (testé avec 10 et 12, mais était trop long pour les tests)
+# calcul de la moyenne des données météo (temperature, wind et humidity) par station (geo_id_insee) et par fenetre de 6min
 df_speed = df_clean \
     .withWatermark("reference_time", "7 minutes") \
     .groupBy(
@@ -113,10 +87,7 @@ df_speed = df_clean \
         avg("humidity").alias("avg_humidity")
     )
 
-# -----------------------------
-# ➕ PREPARAÇÃO PARA CASSANDRA
-# Cassandra não aceita struct (window), então usamos window.start
-# -----------------------------
+# Sélection des colonnes finales et filtrage pour éviter les fenêtres sans données
 df_speed_final = df_speed.select(
     col("geo_id_insee"),
     col("window.start").alias("window_start"),
@@ -125,9 +96,7 @@ df_speed_final = df_speed.select(
     col("avg_humidity")
 ).filter(col("window_start").isNotNull())
 
-# -----------------------------
-# 🔧 MODIFICAÇÃO: saída para Cassandra (Serving Layer)
-# -----------------------------
+# Écriture dans Cassandra
 query = (
     df_speed_final.writeStream
     .foreachBatch(lambda df, epoch_id:
@@ -137,11 +106,12 @@ query = (
           .mode("append")
           .save()
     )
-    # .outputMode("append")  # mais seguro com Cassandra
+    # .outputMode("append") 
     .outputMode("update")
     .trigger(processingTime="1 minute")
     .option("checkpointLocation", "/opt/spark-data/checkpoints/speed_to_cassandra")
     .start()
 )
+
 
 query.awaitTermination()

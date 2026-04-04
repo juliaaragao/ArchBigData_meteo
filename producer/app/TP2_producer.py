@@ -8,18 +8,19 @@ from kafka import KafkaProducer, KafkaClient
 from kafka.admin import KafkaAdminClient, NewTopic
 import os
 
+# Ce producer lit les données de la station météo de Brest-Guipavas (id 29075001) toutes les 6 minutes et les envoie dans le topic meteo
 def main():
     """_summary_
     
     Returns:
         _type_: _description_
     """    
-    API_KEY = os.getenv("API_KEY") # FIXME Set your own API key here
+    API_KEY = os.getenv("API_KEY") # clé API via .env
     #url = " ".format(API_KEY)
     #url = "https://public-api.meteofrance.fr/public/DPObs/station/infrahoraire-6m"
 
-    id_station = "29075001"
-    url = f"https://public-api.meteofrance.fr/public/DPObs/v1/station/infrahoraire-6m?id_station={id_station}&format=json"
+    id_station = "29075001" # definition de la station météo à lire 
+    url = f"https://public-api.meteofrance.fr/public/DPObs/v1/station/infrahoraire-6m?id_station={id_station}&format=json" # url pour lire les données de la station météo 
 
     # topic = sys.argv[1]
     topic = 'meteo'
@@ -50,16 +51,8 @@ def main():
 
     producer = KafkaProducer(bootstrap_servers="kafka:29092")
 
-    # while True:
-    #     response = urllib.request.urlopen(url)
-    #     stations = json.loads(response.read().decode())
-    #     print(len(stations))
-    #     for station in stations:
-    #         producer.send(topic, json.dumps(station).encode())
-            
-    #     print("{} Produced {} station records".format(datetime.fromtimestamp(time.time()), len(stations)))
-    #     time.sleep(60)
 
+    
     while True:
         req = urllib.request.Request(
             url,
@@ -80,11 +73,7 @@ def main():
         for obs in observations:
             producer.send(topic, json.dumps(obs).encode("utf-8"))
 
-        # print("{} Produced {} records".format(
-        #     # datetime.fromtimestamp(time.time()),
-        #     datetime.now(),
-        #     len(observations))
-        # )
+
 
         print("{} Produced {} records".format(
             datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%d %H:%M:%S"),

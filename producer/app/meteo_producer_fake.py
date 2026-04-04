@@ -4,16 +4,16 @@ from kafka import KafkaProducer
 
 
 def main():
-    # onde está o Kafka dentro da rede docker
+
     bootstrap = "kafka:29092"
 
-    # tópico do seu projeto
+    # topic
     topic = "meteo"
 
-    # cria o producer (ele só envia bytes, por isso fazemos json.dumps + encode)
+    # creation du producer Kafka
     producer = KafkaProducer(bootstrap_servers=bootstrap)
 
-    # exemplo de mensagem (fake)
+    # tester fake message
     message = {
         "station_id": "TEST_STATION_001",
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -24,7 +24,7 @@ def main():
 
     producer.send(topic, json.dumps(message).encode("utf-8"))
     producer.flush()
-    print("✅ Sent one message to topic:", topic)
+    print(" Sent one message to topic:", topic)
     print(message)
 
 

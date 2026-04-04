@@ -4,9 +4,7 @@ from pyspark.sql.types import *
 from pyspark.sql.functions import get_json_object
 from pyspark.sql.functions import coalesce
 
-# -----------------------------
-# Spark Session
-# -----------------------------
+# Configurations Spark
 spark = SparkSession.builder \
     .master("spark://spark-master:7077") \
     .appName("MeteoBatchLayer") \
@@ -15,25 +13,21 @@ spark = SparkSession.builder \
 
 spark.sparkContext.setLogLevel("WARN")
 
-# -----------------------------
-# READ PARQUET
-# -----------------------------
+# lecture raw layer - ici on lit les données brutes ingérées précédement (dans le job_ingestion) pour faire le batch
 df_raw = spark.read.parquet("/opt/spark-data/raw/meteo")
 
 print("==== RAW DATA ====")
 df_raw.printSchema()
 df_raw.show(5, False)
 
-# -----------------------------
-# SCHEMA (ATUALIZADO API)
-# -----------------------------
+# schéma pour parser le JSON
 meteo_schema = StructType([
     StructField("lat", DoubleType(), True),
     StructField("lon", DoubleType(), True),
     StructField("geo_id_insee", StringType(), True),
     StructField("reference_time", StringType(), True),
 
-    # 🔥 NOVOS CAMPOS
+    
     StructField("t", DoubleType(), True),
     StructField("t_10", DoubleType(), True),
     StructField("t_20", DoubleType(), True),
@@ -46,9 +40,7 @@ meteo_schema = StructType([
     StructField("pres", DoubleType(), True)
 ])
 
-# -----------------------------
-# DETECT JSON COLUMN
-# -----------------------------
+# comme le message Kafka peut être dans la colonne "json" ou "value"  ->  on gère les deux cas
 if "json" in df_raw.columns:
     json_col = "json"
 elif "value" in df_raw.columns:
@@ -56,9 +48,7 @@ elif "value" in df_raw.columns:
 else:
     raise Exception("Coluna JSON não encontrada")
 
-# -----------------------------
-# PARSE JSON
-# -----------------------------
+# parsing JSON
 df_parsed = df_raw.select(
     get_json_object(col(json_col), "$.geo_id_insee").alias("geo_id_insee"),
     get_json_object(col(json_col), "$.reference_time").alias("reference_time"),
@@ -68,16 +58,13 @@ df_parsed = df_raw.select(
     get_json_object(col(json_col), "$.ff").cast("double").alias("wind_speed")
 )
 
-# -----------------------------
-# CLEANING (ROBUSTO)
-# -----------------------------
-
+# nettoyage / transformation
 df_clean = df_parsed.select(
     col("geo_id_insee"),
     to_timestamp(col("reference_time"), "yyyy-MM-dd'T'HH:mm:ssX").alias("reference_time"),
-    (coalesce(col("t_10"), col("t")) - 273.15).alias("temperature_c"),
+    (coalesce(col("t_10"), col("t")) - 273.15).alias("temperature_c"), # K -> °C et on utilise t ou t_10 ( sélectionne la meilleure valeur disponible)
     col("humidity"),
-    (col("wind_speed") * 3.6).alias("wind_speed")  # conversão de m/s para km/h
+    (col("wind_speed") * 3.6).alias("wind_speed")  # m/s -> km/h
 ).filter(
     col("geo_id_insee").isNotNull() &
     col("reference_time").isNotNull()
@@ -87,9 +74,7 @@ print("==== CLEAN DATA ====")
 print("CLEAN COUNT:", df_clean.count())
 df_clean.select("reference_time").show(20, False)
 
-# -----------------------------
-# BATCH AGGREGATION
-# -----------------------------
+# aggregation batch par station et par jour (pour le batch layer) -> l'idée est de presenter une vue par jour pour le batch layer, avec cela c'est possible de faire des analyses historiques, des tendances par exemple
 df_batch = df_clean.groupBy(
     col("geo_id_insee"),
     to_date(col("reference_time")).alias("date")
@@ -103,18 +88,14 @@ print("==== BATCH RESULT ====")
 print("BATCH COUNT:", df_batch.count())
 df_batch.orderBy("date").show(50, False)
 
-# -----------------------------
-# WRITE PARQUET
-# -----------------------------
+# Stockage en Parquet (Batch Layer) 
 df_batch.write \
     .mode("append") \
     .parquet("/opt/spark-data/batch/meteo_aggregated")
 
 print("Written to Parquet")
 
-# -----------------------------
-# WRITE CASSANDRA
-# -----------------------------
+# Stockage dans Cassandra (Serving Layer)
 df_batch.write \
     .format("org.apache.spark.sql.cassandra") \
     .mode("append") \
@@ -124,7 +105,4 @@ df_batch.write \
 
 print("Written to Cassandra")
 
-# -----------------------------
-# STOP
-# -----------------------------
 spark.stop()
