@@ -1,92 +1,138 @@
 # Big Data Project — Lambda Architecture (Météo)
 
-## Structure principale du projet
+Ce projet met en oeuvre un pipeline de traitement de données météorologiques reposant sur une Lambda Architecture. 
+
+Les observations sont collectées de l'API publique de Météo France et transitent par un système d'ingestion continu avant d'être traitées selon deux approches complémentaires : 
+- traitement en temps réel pour la réactivité
+- traitement batch pour la consolidation des résultats sur l'historique. 
+
+Nous avons utilisé un environnement conteneurisé et s'appuie sur des outils Kafka, Spark, Cassandra et grafana. 
+
+
+## Architecture globale
+
+```
+API Météo France → Kafka → Spark → (RAW -> Batch / Speed) → Cassandra → Grafana
+```
+
+
+## Structure principale du projet 
 
 ```bash
 .
 ├── cassandra/              # Configuration Cassandra (docker-compose mono)
-├── kafka/                  # Configuration Kafka
+├── kafka/                  # Configuration Kafka + producer
 ├── producer/               # Producer Kafka (envoi des données météo)
 ├── spark/
 │   └── apps/
-│       ├── job_ingestion.py    # RAW layer (Kafka → Parquet)
-│       ├── job_speedlayer.py   # Speed layer (Streaming → Cassandra)
-│       └── job_batchlayer.py   # Batch layer (Parquet → Cassandra)
+│       ├── job_ingestion.py    # RAW layer  
+│       ├── job_speedlayer.py   # Speed layer 
+│       └── job_batchlayer.py   # Batch layer 
 ├── grafana/                # Configuration Grafana
 ├── data/                   # Données stockées (Parquet)
 └── README.md
 ```
 
-## Description
+> Certains fichiers présents dans le dépôt ont été repris et adaptés à partir de TPs réalisés en cours et, donc, ils peuvent ne pas être utilisés directement dans le pipeline final. 
+> Les fichiers listés ci-dessus correspondent aux composants effectivement utilisés.
 
-* **cassandra/** - contient le déploiement de Cassandra (mode mono-node)
-* **kafka/** - configuration du broker Kafka
-* **producer/** - script qui envoie les données météo dans Kafka
-* **spark/apps/** - jobs Spark :
-  * ingestion (RAW)
-  * streaming (speed layer)
-  * batch (historique)
-* **grafana/** - dashboard et visualisation
+## Lancement des containers
 
 
-## Architecture
-API → Kafka → Spark → (RAW / Speed / Batch) → Cassandra → Grafana
+### 1. Kafka + Producer
 
-RAW layer → stockage brut (Parquet)
-Speed layer → temps réel (Kafka → Spark → Cassandra)
-Batch layer → historique (Parquet → Spark → Cassandra)
-Serving layer → Cassandra → Grafana
+```bash
+cd kafka
+docker-compose up -d --build
+```
 
-## Containers a activer
-1. kafka - Le producer est lancé automatiquement avec Kafka 
-```docker-compose up --build -d```
+### 2. Spark
 
-2. spark
-```docker-compose up --build -d```
+```bash
+cd spark
+docker-compose up -d --build
+```
 
+### 3. Cassandra
 
-3. cassandra
-```docker-compose -f docker-compose_mono.yml up -d```
+```bash
+cd cassandra
+docker-compose -f docker-compose_mono.yml up -d
+```
 
+### 4. Grafana
 
-4. grafana
-```docker-compose up --build -d```
-
-
-
-## Lancement du RAW, Speed layer et Batch Layer
-
-1. Valider création des donnes sur le topic meteo
-```docker logs -f producer```
-
-2. Spark
-```docker exec -it spark-master bash```
+```bash
+cd grafana
+docker-compose up -d --build
+```
 
 
-Pour la partie raw data en parquet
-```spark-submit   --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1,com.datastax.spark:spark-cassandra-connector_2.13:3.4.1   /opt/spark-apps/job_ingestion.py```
+## Lancement des traitements Spark
 
-Pour le speed layer
-```spark-submit   --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1,com.datastax.spark:spark-cassandra-connector_2.13:3.4.1   /opt/spark-apps/job_speedlayer.py```
+Dans le container Spark:
 
-Pour le batch layer
-```spark-submit   --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1,com.datastax.spark:spark-cassandra-connector_2.13:3.4.1   /opt/spark-apps/job_batchlayer.py```
+```bash
+docker exec -it spark-master bash
+```
+
+### RAW layer
+
+```bash
+spark-submit \
+  --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1,com.datastax.spark:spark-cassandra-connector_2.13:3.4.1 \
+  /opt/spark-apps/job_ingestion.py
+```
+
+### Speed layer 
+
+```bash
+spark-submit \
+  --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1,com.datastax.spark:spark-cassandra-connector_2.13:3.4.1 \
+  /opt/spark-apps/job_speedlayer.py
+```
+
+- Laisser tourner le **speed layer** au moins **15 minutes** (afin de couvrir au moins deux fenêtres de 6 min et le watermark de 7 min), puis **l'arrêter pour libérer les ressources du cluster Spark**, et le relancer une fois le job terminé.
+
+### Batch layer 
+
+```bash
+spark-submit \
+  --packages org.apache.spark:spark-sql-kafka-0-10_2.13:4.0.1,com.datastax.spark:spark-cassandra-connector_2.13:3.4.1 \
+  /opt/spark-apps/job_batchlayer.py
+```
 
 
-Cassandra
-```docker exec -it cassandra bash```
+## Vérification
 
-```SELECT * FROM meteo.speed;```
+### Kafka — logs du producer
 
-```SELECT * FROM meteo.batch_meteo;```
+```bash
+docker logs -f producer
+```
 
-Grafana
-acceder a: http://localhost:3000
-dashboards > teste
+### Cassandra — requêtes CQL
+
+```bash
+docker exec -it cassandra cqlsh
+```
+
+```sql
+SELECT * FROM meteo.speed LIMIT 10;
+SELECT * FROM meteo.batch_meteo LIMIT 10;
+```
+
+### Grafana
+
+Accéder [http://localhost:3000](http://localhost:3000) → Dashboards → "teste"
+
 
 
 ## Notes importantes
-- Le producer envoie des données toutes les ~6 minutes
-- Le speed layer doit rester actif pour voir les updates
-- Si aucune donnée ne s’affiche, supprimer le checkpoint :
-```rm -rf /opt/spark-data/checkpoints/speed_to_cassandra```
+- Le speed layer doit rester actif en continu pour que les données soient mises à jour dans Cassandra
+- En cas de stream bloqué, supprimer le checkpoint :
+
+```bash
+rm -rf /opt/spark-data/checkpoints/speed_to_cassandra
+```
+
